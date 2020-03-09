@@ -41,6 +41,9 @@ namespace hex {
             std::string s(rhs);
             operator=(s);
         }
+        json(const std::initializer_list<json>& rhs){
+            operator=(rhs);
+        }
         void clean_type(){
             if(type == OBJECT) delete val.object;
             if(type == ARRAY) delete val.array;
@@ -117,5 +120,18 @@ namespace hex {
             __builtin_trap();
         }
     };
+    json make_obj(const std::initializer_list<std::pair<std::string,json>> rhs){
+        json ret;
+        for(auto& i : rhs){
+            ret[i.first] = i.second;
+        }
+        return ret;
+    }
+    /* Time to beat RapidJSON. */
+    json parse_json(const std::string& input, int start = 0){
+        json ret(INVALID_ITEM);
+        for(int pos = start; pos < input.length(); pos++){
+        }
+    }
 };
 
