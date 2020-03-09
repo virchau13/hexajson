@@ -3,23 +3,19 @@
 #include <map>
 
 namespace hex {
-    /* JSON types as described in the RFC.
-     * Enums would be used, except for the fact that enums are 4 bytes,
-     * and we only need 1.
-     */
-    typedef uint8_t val_type;
-    const uint8_t
-        UNDEFINED = 0x0,
-        NUMBER = 0x1,
-        STRING = 0x2,
-        BOOLEAN = 0x3,
-        ARRAY = 0x4,
-        OBJECT = 0x5,
-        INVALID_ITEM = 0xFF;
+    /* JSON types as described in the RFC. */
+    enum val_type {
+        UNDEFINED,
+        NUMBER,
+        STRING,
+        BOOLEAN,
+        ARRAY,
+        OBJECT,
+        INVALID_ITEM
+    };
     class json;
     union value {
-        int64_t number;
-        double decimal;
+        double number;
         std::map<std::string, json> *object;
         std::vector<json> *array;
         std::string *str;
@@ -28,20 +24,56 @@ namespace hex {
     class json {
     public:
         value val;
-        val_type type;
-        json(): type(INVALID_ITEM) {}
-        json(const val_type& t){
+        val_type type = INVALID_ITEM;
+        json(const val_type& t = OBJECT){
             type = t;
             if(t == OBJECT) val.object = new std::map<std::string, json>();
             if(t == ARRAY) val.array = new std::vector<json>();
             if(t == STRING) val.str = new std::string();
         }
-        const json& operator=(const json& rhs){
+        json(double rhs){
+            operator=(rhs);
+        }
+        json(const std::string& rhs){
+            operator=(rhs);
+        }
+        json(const char* rhs){
+            std::string s(rhs);
+            operator=(s);
+        }
+        void clean_type(){
             if(type == OBJECT) delete val.object;
             if(type == ARRAY) delete val.array;
             if(type == STRING) delete val.str;
+            type = INVALID_ITEM;
+        }
+        const json& operator=(const json& rhs){
+            clean_type();
             type = rhs.type;
             val = rhs.val;
+            return *this;
+        }
+        const json& operator=(const std::string& rhs){
+            clean_type();
+            type = STRING;
+            val.str = new std::string(rhs);
+            return *this;
+        }
+        const json& operator=(double rhs){
+            clean_type();
+            type = NUMBER;
+            val.number = rhs;
+            return *this;
+        }
+        const json& operator=(const char* rhs){
+            std::string s(rhs);
+            operator=(s);
+            return *this;
+        }
+        const json& operator=(const std::initializer_list<json>& rhs){
+            clean_type();
+            type = ARRAY;
+            val.array = new std::vector<json>(rhs);
             return *this;
         }
         bool operator==(const json& rhs){ 
@@ -50,13 +82,40 @@ namespace hex {
         bool operator!=(const json& rhs){
             return !operator==(rhs);
         }
-        const json& operator[](std::string key){
+        json& operator[](const std::string& key){
             return val.object->operator[](key);
         }
-        const json& operator[](size_t idx){
+        json& operator[](size_t idx){
             return val.array->operator[](idx);
         }
-        const std::string& to_string();
+        std::string dump(){
+            if(type == NUMBER) return std::to_string(val.number);
+            if(type == BOOLEAN) return val.boolean ? "true" : "false";
+            if(type == UNDEFINED) return "null";
+            if(type == STRING) return '"' + (*val.str) + '"';
+            if(type == ARRAY){
+                std::string ret = "[";
+                for(auto& j : *val.array){
+                    ret += j.dump();
+                    ret += ",";
+                }
+                ret.pop_back();
+                ret += "]";
+                return ret;
+            }
+            if(type == OBJECT){
+                std::string ret = "{";
+                for(auto& j : *val.object){
+                    ret += '"' + j.first + "\":";
+                    ret += j.second.dump();
+                    ret += ",";
+                }
+                ret.pop_back();
+                ret += "}";
+                return ret;
+            }
+            __builtin_trap();
+        }
     };
 };
 

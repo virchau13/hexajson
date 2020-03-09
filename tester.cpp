@@ -12,13 +12,18 @@ int main(int argc, char *argv[]){
         return EXIT_FAILURE;
     }
     if(arg == "manual"){
+        /*
         std::cin >> std::noskipws;
         std::istream_iterator<char> start(std::cin), end;
         std::string input(start, end);
         hex::json j = hex::parse_json(input);
-        std::cout << j.dump_json() << std::endl;
+        std::cout << j.dump_json() << std::endl; */
     } else if(arg == "automated"){
         //TODO: add tests
+        hex::json j;
+        j["a"] = "b";
+        j["something"] = { 4, "a", 2.0 };
+        std::cout << j.dump() << '\n';
     }
     return EXIT_SUCCESS;
 }
