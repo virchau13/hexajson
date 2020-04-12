@@ -4,7 +4,7 @@
 
 namespace hex {
     /* JSON types as described in the RFC. */
-    enum val_type {
+    enum val_type : uint8_t {
         UNDEFINED,
         NUMBER,
         STRING,
