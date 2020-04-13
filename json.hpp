@@ -5,7 +5,6 @@
 #include <vector>
 #include <map>
 #include <charconv>
-#include <sstream>
 
 #ifdef DEBUG
 #define dbg std::cerr
@@ -27,11 +26,69 @@ namespace hex {
     };
     class json;
     typedef std::map<std::string, json> table;
+    class array_t {
+    public:
+        std::vector<json *> data;
+        class iterator {
+        public:
+            std::vector<json *>::iterator it;
+            iterator(std::vector<json *>::iterator jt): it(jt) {}
+            inline void operator++(int){
+                ++it;
+            }
+            inline void operator++(){
+                ++it;
+            }
+            inline void operator--(int){
+                --it;
+            }
+            inline void operator--(){
+                --it;
+            }
+            inline void operator+=(int x){
+                it += x;
+            }
+            inline void operator-=(int x){
+                it -= x;
+            }
+            inline void operator=(std::vector<json *>::iterator jt){
+                it = jt;
+            }
+            inline json& operator*(){
+                return *(*it);
+            }
+        };
+        array_t(): data(0) {}
+        array_t(const size_t size): data(size) {}
+        array_t(const array_t& rhs);
+        array_t(array_t&& rhs): data(std::move(rhs.data)) {}
+        ~array_t();
+        inline const size_t size() const noexcept {
+            return data.size();
+        }
+        inline json& operator[](size_t idx){
+            return *data[idx];
+        }
+        inline iterator begin() noexcept {
+            return data.begin();
+        }
+        inline iterator end() noexcept {
+            return data.end();
+        }
+        inline json& back(){
+            return *data[data.size()-1];
+        }
+        inline void push_back(const json& x);
+        inline void pop_back(){
+            data.pop_back();
+        }
+        inline bool operator==(const array_t& rhs) const;
+    };
     union value {
         double decimal;
         int64_t integer;
         table *object;
-        std::vector<json> *array;
+        array_t *array;
         std::string *str;
         bool boolean;
         const char *invalid_end;
@@ -45,7 +102,9 @@ namespace hex {
         json(const json& rhs){
             type = rhs.type;
             if(type == OBJECT) val.object = new table(*rhs.val.object);
-            else if(type == ARRAY) val.array = new std::vector<json>(*rhs.val.array);
+            else if(type == ARRAY){
+                val.array = new array_t(*rhs.val.array);
+            }
             else if(type == STRING) val.str = new std::string(*rhs.val.str);
             else val = rhs.val;
         }
@@ -53,12 +112,15 @@ namespace hex {
             type = rhs.type;
             /* Move constructor, more like pilfer constructor. */
             val = rhs.val;
+            if(rhs.type == OBJECT) rhs.val.object = nullptr;
+            if(rhs.type == ARRAY) rhs.val.array = nullptr;
+            if(rhs.type == STRING) rhs.val.str = nullptr;
             rhs.type = INVALID_ITEM;
         }
         json(const val_type& t = OBJECT){
             type = t;
             if(t == OBJECT) val.object = new table();
-            if(t == ARRAY) val.array = new std::vector<json>();
+            if(t == ARRAY) val.array = new array_t();
             if(t == STRING) val.str = new std::string();
         }
         json(const std::string& rhs){
@@ -76,7 +138,9 @@ namespace hex {
         }
         void clean_type(){
             if(type == OBJECT) delete val.object;
-            if(type == ARRAY) delete val.array;
+            if(type == ARRAY){
+                delete val.array;
+            }
             if(type == STRING) delete val.str;
             type = INVALID_ITEM;
         }
@@ -90,7 +154,9 @@ namespace hex {
             clean_type();
             type = rhs.type;
             if(type == OBJECT) val.object = new table(*rhs.val.object);
-            else if(type == ARRAY) val.array = new std::vector<json>(*rhs.val.array);
+            else if(type == ARRAY){
+                val.array = new array_t(*rhs.val.array);
+            }
             else if(type == STRING) val.str = new std::string(*rhs.val.str);
             else val = rhs.val;
             return *this;
@@ -99,7 +165,7 @@ namespace hex {
             clean_type();
             type = t;
             if(t == OBJECT) val.object = new table();
-            if(t == ARRAY) val.array = new std::vector<json>();
+            if(t == ARRAY) val.array = new array_t();
             if(t == STRING) val.str = new std::string();
             return *this;
         }
@@ -120,10 +186,10 @@ namespace hex {
             operator=(s);
             return *this;
         }
-        const json& operator=(const std::vector<json>& rhs){
+        const json& operator=(const array_t& rhs){
             clean_type();
             type = ARRAY;
-            val.array = new std::vector<json>(rhs);
+            val.array = new array_t(rhs);
             return *this;
         }
         bool operator==(const json& rhs) const noexcept { 
@@ -143,7 +209,7 @@ namespace hex {
             return val.object->operator[](k);
         }
         json& operator[](size_t idx){
-            return val.array->operator[](idx);
+            return (*val.array)[idx];
         }
         // }}}
         // convenience functions
@@ -163,22 +229,30 @@ namespace hex {
         void push_back(const json& j){
             val.array->push_back(j);
         }
+        void pop_back(){
+            val.array->pop_back();
+        }
         inline bool invalid(){
             return type == INVALID_ITEM;
         }
+        inline const size_t size() const noexcept {
+            return (type == OBJECT ? val.object->size() :
+                    type == ARRAY ? val.array->size() :
+                    /* type == STRING */ val.str->size());
+        }
+        inline json& back() noexcept {
+            return val.array->back();
+        }
         // }}}
+        // stringify functions
+        // {{{
         std::string dump(){
+            // FIXME: locale independent dump()
             if(type == INTEGER){
-                std::ostringstream oss;
-                oss.imbue(std::locale::classic());
-                oss << val.decimal;
-                return oss.str();
+                return std::to_string(val.integer);
             }
             if(type == DECIMAL){
-                std::ostringstream oss;
-                oss.imbue(std::locale::classic());
-                oss << val.decimal;
-                return oss.str();
+                return std::to_string(val.decimal);
             }
             if(type == BOOLEAN) return val.boolean ? "true" : "false";
             if(type == UNDEFINED) return "null";
@@ -186,7 +260,7 @@ namespace hex {
             if(type == ARRAY){
                 std::string ret = "[";
                 for(int i = 0; i < val.array->size(); i++){
-                    ret += val.array->operator[](i).dump();
+                    ret += (*val.array)[i].dump();
                     ret += ",";
                 }
                 ret.pop_back();
@@ -227,7 +301,7 @@ namespace hex {
             dbg << (type == INVALID_ITEM ? "INVALID" : "NOT INVALID BUT TRAPPING") << '\n';
             __builtin_trap();
         }
-
+        // }}}
         /* Static functions */
         // {{{
         static json make_obj(const std::initializer_list< std::pair<std::string, json> >& t){
@@ -238,22 +312,23 @@ namespace hex {
             }
             return ret;
         }
+        /*
         static json make_array(const std::initializer_list<json>& t){
             json ret(ARRAY);
-            ret.val.array = new std::vector<json>(t);
+            ret.val.array = new array_t(t);
             return ret;
-        }
-        static bool is_space(char c){
+        } */
+        static inline bool is_space(char c){
             // Whitespace in JSON is any of 0x20 (space), 0x09 (horizontal tab), 0x0a (\n), 0x0d (\r).
             return (c == 0x20 || c == 0x09 || c == 0x0a || c == 0x0d);
         }
 
         /* Parses a std::string that would appear in a JSON.
-         * Returns the std::string, and a pointer showing the one directly _after_ it finished parsing.
+         * Puts the result value in the std::string, and returns a pointer showing the one directly _after_ it finished parsing.
          * If the std::string was invalid, the pointer will be (the actual pointer) + (length passed to this function) + 1,
          * (so > checks are easy to do.)
          */
-        static std::pair<std::string, const char*> parse_string_incomplete(const char *str, const char *end){
+        static const char *parse_string_incomplete(const char *str, const char *end, std::string& result){
             /* This is not actually that simple. 
              * Excerpt from RFC:
              * char = unescaped /
@@ -269,9 +344,8 @@ namespace hex {
                       %x75 4HEXDIG )  ; uXXXX
               */
             size_t length = end - str;
-            std::string result;
             // Check if str starts with '"'.
-            if(*str != '"') return { result, str + length + 1 };
+            if(*str != '"') return str + length + 1;
             str++;
             while(*str != '"' && str != end){
                 /* Annoying part. */
@@ -304,7 +378,7 @@ namespace hex {
                                 codepoint += (int)(c - '0' + 10) * mul;
                             } else {
                                 // Invalid.
-                                return { result, str + length + 1 };
+                                return str + length + 1;
                             }
                         }
                         if(codepoint <= 0x007f){ // ASCII range (1 byte)
@@ -324,7 +398,7 @@ namespace hex {
                         /* Thankfully, we do not have to handle U+10000 to U+10FFFF. */
                     } else {
                         // Invalid.
-                        return { result, str + length + 1 };
+                        return str + length + 1;
                     }
                     str++;
                 } else {
@@ -333,217 +407,241 @@ namespace hex {
                 }
             }
             if(str == end){
-                return { result, str + length + 1 };
+                return str + length + 1;
             }
             // Get rid of last quote.
             str++;
-            return { result, str };
+            return str;
         }
 
         /* Time to beat RapidJSON. */
         /* Just to make life easier: */
 #define skip_ws() do { \
     while(curr != end && is_space(*curr)) curr++; \
-    if(curr == end) return { json(INVALID_ITEM), curr }; \
+    if(curr == end){ result = INVALID_ITEM; return end; } \
 } while(0);
 #define expect(c) do { \
-    if(curr == end || *curr != c) return { json(INVALID_ITEM), curr }; \
+    if(curr == end || *curr != c){ result = INVALID_ITEM; return curr; }; \
     curr++; \
 } while(0);
-#ifdef DEBUG
-#define invalid_(p) std::move(std::make_pair(json(INVALID_ITEM), (const char *)p + ((int)(bool)(dbg << "INVALID AT " << __LINE__ << '\n') & 0)))
-#else
-#define invalid_(p) std::move(std::make_pair(json(INVALID_ITEM), (const char *)p))
-#endif
         /* Parses the JSON given to it. Returns a std::pair<json, const char*>.
          * If the JSON was invalid, it returns a json of type INVALID_ITEM.
          * The char* shows how far it parsed (or where the JSON ended.)
          */
-        static std::pair<json, const char*> parse_incomplete(const char *inp, const char *end){
+        static const char *parse_incomplete(const char *inp, const char *end, json& result){
             // JSON types: object, array, std::string, numbers, boolean, null
             // Current character.
             const char *curr = inp;
-            // result.
-            json result(INVALID_ITEM);
 
-            while(true){
+            skip_ws();
+
+            /* Object
+             * { "key1": <member1> , "key2": <member2> , ... }
+             */
+            if(*curr == '{'){
+                result = OBJECT;
+                curr++;
                 skip_ws();
-
-                /* Object
-                 * { "key1": <member1> , "key2": <member2> , ... }
-                 */
-                if(*curr == '{'){
-                    result = OBJECT;
-                    curr++;
+                // Check for empty object.
+                if(*curr == '}'){
+                    return curr+1;
+                }
+                for(;;){
                     skip_ws();
-                    // Check for empty object.
+                    std::string key;
+                    const char *next = parse_string_incomplete(curr, end, key);
+                    if(next > end){
+                        result = INVALID_ITEM;
+                        return next - (end-curr) - 1;
+                    }
+                    curr = next;
+                    skip_ws();
+                    expect(':');
+                    result[key] = INVALID_ITEM;
+                    auto& valref = result[key];
+                    /* Recursive time. */
+                    next = parse_incomplete(curr, end, valref);
+                    if(valref.invalid()){
+                        result = INVALID_ITEM;
+                        return next;
+                    }
+                    curr = next;
+                    skip_ws();
                     if(*curr == '}'){
-                        return std::move(std::make_pair(result, curr+1));
-                    }
-                    for(;;){
-                        skip_ws();
-                        auto key = parse_string_incomplete(curr, end);
-                        if(key.second > end){
-                            return invalid_(key.second - (end-curr) - 1);
-                        }
-                        curr = key.second;
-                        skip_ws();
-                        expect(':');
-                        /* Recursive time. */
-                        auto value = parse_incomplete(curr, end);
-                        if(value.first.invalid()){
-                            return invalid_(value.second);
-                        }
-                        curr = value.second;
-                        result[key.first] = std::move(value.first);
-                        skip_ws();
-                        if(*curr == '}'){
-                            // End of object.
-                            return std::move(std::make_pair(result, curr+1));
-                        } else {
-                            expect(',');
-                        }
-                    }
-                }
-
-                /* Array
-                 * [ <member1> , <member2> , ... ]
-                 */
-                else if(*curr == '['){
-                    result = ARRAY;
-                    curr++;
-                    skip_ws();
-                    // Check for empty array.
-                    if(*curr == ']'){
-                        return std::move(std::make_pair(result, curr+1));
-                    }
-                    for(;;){
-                        std::pair<json, const char *> value = parse_incomplete(curr, end);
-                        if(value.first.invalid()){
-                            return invalid_(value.second);
-                        }
-                        curr = value.second;
-                        result.push_back(std::move(value.first));
-                        skip_ws();
-                        if(*curr == ']'){
-                            // End array
-                            return std::move(std::make_pair(result, curr+1));
-                        } else {
-                            expect(',');
-                        }
-                    }
-                }
-
-                /* String
-                 * "x"
-                 */
-                else if(*curr == '"'){
-                    result = STRING;
-                    std::pair<std::string, const char *> str = parse_string_incomplete(curr, end);
-                    if(str.second > end){
-                        return invalid_(str.second - (end-curr) - 1);
-                    }
-                    curr = str.second;
-                    result.as_str() = str.first;
-                    return std::move(std::make_pair(result, curr));
-                }
-
-                /* Number
-                 * 31.415e-1
-                 */
-                else if(('0' <= *curr && *curr <= '9') || *curr == '-'){
-                    // Non-zero numbers can't start with 0.
-                    // We will ignore that restriction.
-                    const char *num_start = curr;
-                    if(*curr == '-') curr++;
-                    while(curr != end && ('0' <= *curr && *curr <= '9')){
-                        curr++;
-                    }
-                    if(curr != end && (*curr == '.' || tolower(*curr) == 'e')){
-                        /* Decimal */
-                        result = DECIMAL;
-                        std::istringstream istr(num_start);
-                        istr.imbue(std::locale::classic());
-                        if(!(istr >> result.val.decimal)){
-                            // Error
-                            return invalid_(num_start + istr.tellg());
-                        }
-                        return std::move(std::make_pair(result, num_start + istr.tellg()));
+                        // End of object.
+                        return curr+1;
                     } else {
-                        /* Integer */
-                        result = INTEGER;
-                        std::from_chars(num_start, end, result.val.integer);
-                        // We already know it's valid and therefore don't need
-                        // to check if the result errored.
-                        return std::move(std::make_pair(result, curr));
+                        expect(',');
                     }
                 }
-
-                /* Booleans
-                 * true
-                 * false
-                 */
-                else if(*curr == 't'){
-                    result = BOOLEAN;
-                    curr++;
-                    expect('r');
-                    expect('u');
-                    expect('e');
-                    result.val.boolean = true;
-                    return std::move(std::make_pair(result, curr));
-                } else if(*curr == 'f'){
-                    result = BOOLEAN;
-                    curr++;
-                    expect('a');
-                    expect('l');
-                    expect('s');
-                    expect('e');
-                    result.val.boolean = false;
-                    return std::move(std::make_pair(result, curr));
-                }
-
-                /* Null
-                 * null
-                 */
-                else if(*curr == 'n'){
-                    result = UNDEFINED;
-                    curr++;
-                    expect('u');
-                    expect('l');
-                    expect('l');
-                    return std::move(std::make_pair(result, curr));
-                }
-
-                // Otherwise, it's invalid.
-                return invalid_(curr);
             }
+
+            /* Array
+             * [ <member1> , <member2> , ... ]
+             */
+            else if(*curr == '['){
+                result = ARRAY;
+                curr++;
+                skip_ws();
+                // Check for empty array.
+                if(*curr == ']'){
+                    return curr+1;
+                }
+                for(;;){
+                    result.push_back(json(INVALID_ITEM));
+                    const char *next = parse_incomplete(curr, end, result.back());
+                    if(result.back().type == INVALID_ITEM){
+                        result = INVALID_ITEM;
+                        return next;
+                    }
+                    curr = next;
+                    skip_ws();
+                    if(*curr == ']'){
+                        // End array
+                        return curr+1;
+                    } else {
+                        expect(',');
+                    }
+                }
+            }
+
+            /* String
+             * "x"
+             */
+            else if(*curr == '"'){
+                result = STRING;
+                const char *next = parse_string_incomplete(curr, end, result.as_str());
+                if(next > end){
+                    result = INVALID_ITEM;
+                    return next - (end-curr) - 1;
+                }
+                return next;
+            }
+
+            /* Number
+             * 31.415e-1
+             */
+            else if(('0' <= *curr && *curr <= '9') || *curr == '-'){
+                // Non-zero numbers can't start with 0.
+                // We will ignore that restriction.
+                const char *num_start = curr;
+                if(*curr == '-') curr++;
+                while(curr != end && ('0' <= *curr && *curr <= '9')){
+                    curr++;
+                }
+                if(curr != end && (*curr == '.' || tolower(*curr) == 'e')){
+                    /* Decimal */
+                    result = DECIMAL;
+                    if(*curr == '.'){
+                        curr++;
+                        while('0' <= *curr && *curr <= '9') curr++;
+                    }
+                    if(tolower(*curr) == 'e'){
+                        curr++;
+                        if(*curr == '+' || *curr == '-') curr++;
+                        while('0' <= *curr && *curr <= '9') curr++;
+                    }
+                    char *endptr;
+                    result.val.decimal = strtod(num_start, &endptr);
+                    if(endptr != curr){
+                        result = INVALID_ITEM;
+                    }
+                    return endptr;
+                } else {
+                    /* Integer */
+                    result = INTEGER;
+                    std::from_chars(num_start, curr, result.val.integer);
+                    // We already know it's valid and therefore don't need
+                    // to check if the result errored.
+                    return curr;
+                }
+            }
+
+            /* Booleans
+             * true
+             * false
+             */
+            else if(*curr == 't'){
+                result = BOOLEAN;
+                curr++;
+                expect('r');
+                expect('u');
+                expect('e');
+                result.val.boolean = true;
+                return curr;
+            } else if(*curr == 'f'){
+                result = BOOLEAN;
+                curr++;
+                expect('a');
+                expect('l');
+                expect('s');
+                expect('e');
+                result.val.boolean = false;
+                return curr;
+            }
+
+            /* Null
+             * null
+             */
+            else if(*curr == 'n'){
+                result = UNDEFINED;
+                curr++;
+                expect('u');
+                expect('l');
+                expect('l');
+                return curr;
+            }
+
+            // Otherwise, it's invalid.
+            result = INVALID_ITEM;
+            return curr;
         }
 #undef expect
 #undef skip_ws
-#undef invalid_
         static json parse(const char *input, const char *end){
-            auto p = parse_incomplete(input, end);
+            json result(INVALID_ITEM);
+            const char *p = parse_incomplete(input, end, result);
             // Don't waste unnecessary CPU cycles.
-            if(p.first.type == INVALID_ITEM){
-                p.first.val.invalid_end = p.second;
-                return p.first;
+            if(result.invalid()){
+                result.val.invalid_end = p;
+                return result;
             }
             // if is not end of string (minus whitespace)
-            while(p.second != end){
-                if(!is_space(*p.second)){
-                    json res(INVALID_ITEM);
-                    res.val.invalid_end = p.second;
-                    return res;
+            while(p != end){
+                if(!is_space(*p)){
+                    result = INVALID_ITEM;
+                    result.val.invalid_end = p;
+                    return result;
                 }
-                p.second++;
+                p++;
             }
-            return p.first;
+            return result;
         }
         static json parse(const std::string& input){
             return parse(input.c_str(), input.c_str() + input.size());
         }
         // }}}
     };
+    // array_t functions
+    // {{{
+    array_t::array_t(const array_t& rhs): data(rhs.size()) {
+        for(int i = 0; i < rhs.size(); i++){
+            data[i] = new json(*rhs.data[i]);
+        }
+    }
+    array_t::~array_t(){
+        for(int i = 0; i < data.size(); i++) delete data[i];
+    }
+    inline void array_t::push_back(const json& x){
+        data.push_back(new json(x));
+    }
+    inline bool array_t::operator==(const array_t& rhs) const {
+        if(rhs.data.size() != data.size()) return false;
+        for(int i = 0; i < data.size(); i++){
+            if(!(*data[i] == *rhs.data[i])) return false;
+        }
+        return true;
+    }
 }
 
 #undef dbg
