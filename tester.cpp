@@ -2,42 +2,60 @@
 #include <string>
 #include <fstream>
 #include <iterator>
-#include "parser.hpp"
+#include "json.hpp"
+#include <filesystem>
+namespace fs = std::filesystem;
 
-void test(int line, bool cond, bool ok){
-    if(cond != ok){
-        std::cerr << line << " test failed.\n";
-        exit(EXIT_FAILURE);
-    }
+std::string read_file(const std::string& path){
+    std::string input;
+    std::ifstream in(path, std::ios::in | std::ios::binary);
+    in.seekg(0, std::ios::end);
+    input.resize(in.tellg());
+    in.seekg(0, std::ios::beg);
+    in.read(&input[0], input.size());
+    in.close();
+    return input;
 }
 
-#define PASS(x) test(__LINE__, x, true)
-#define FAIL(x) test(__LINE__, x, false)
+std::string red = "\033[1;31m", green = "\033[1;32m", norm = "\033[0m";
 
 /* Tests the JSON library. */
 int main(int argc, char *argv[]){
-    std::string arg(argc == 2 ? argv[1] : "");
-    if(argc != 2 || (arg != "automated" && arg != "manual")){
-        std::cerr << "Usage: " << argv[0] << " automated|manual\n";
-        return EXIT_FAILURE;
+    int passc = 0, failc = 0, num = 0;
+    std::cout << "Fail testing...\n";
+    for(const auto& fail : fs::directory_iterator("./fail/")){
+        hex::json j = hex::json::parse(read_file(fail.path()));
+        if(j.invalid()){
+            passc++;
+        } else {
+            std::cout << red << fail.path().filename() << " failed\n" << norm;
+            failc++;
+        }
+        num++;
     }
-    if(arg == "manual"){
-        std::cin >> std::noskipws;
-        std::istream_iterator<char> start(std::cin), end;
-        std::string input(start, end);
-        hex::json j = hex::parse_json(input);
-        std::cout << j.dump() << std::endl;
-    } else if(arg == "automated"){
-        //TODO: add tests
-        hex::json j;
-        j["a"] = "b";
-        j["something"] = { 4, "a", 2.0 };
-        j["x"] = hex::make_obj({
-            {"y", 7},
-            {"z", "a"},
-            {"extra", { 4, "a", 3 } }
-        });
-        std::cout << j.dump() << '\n';
+    std::cout << "Fail test results: Out of " << num << " tests, ";
+    if(passc) std::cout << green << passc << " tests passed"; 
+    if(failc) {
+        if(passc) std::cout << ", ";
+        std::cout << red << failc << " tests failed";
     }
-    return EXIT_SUCCESS;
+    std::cout << '\n' << norm;
+    std::cout << "Pass testing...\n";
+    passc = failc = 0;
+    for(const auto& pass : fs::directory_iterator("./pass/")){
+        hex::json j = hex::json::parse(read_file(pass.path()));
+        if(!j.invalid()){
+            passc++;
+        } else {
+            std::cout << red << pass.path().filename() << " failed\n" << norm;
+            failc++;
+        }
+    }
+    std::cout << "Pass test results: Out of " << num << " tests, ";
+    if(passc) std::cout << green << passc << " tests passed";
+    if(failc){
+        if(passc) std::cout << ", ";
+        std::cout << red << failc << " tests failed";
+    }
+    std::cout << '\n' << norm;
 }

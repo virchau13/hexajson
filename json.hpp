@@ -349,7 +349,10 @@ namespace hex {
             str++;
             while(*str != '"' && str != end){
                 /* Annoying part. */
-                if(*str == '\\'){
+                if(*str < 0x20){
+                    // These characters have to be escaped.
+                    return str + length + 1;
+                } else if(*str == '\\'){
                     str++;
                     /* Literally mean themselves. */
                     if(*str == '"' || *str == '\\' || *str == '/'){
@@ -523,7 +526,10 @@ namespace hex {
              */
             else if(('0' <= *curr && *curr <= '9') || *curr == '-'){
                 // Non-zero numbers can't start with 0.
-                // We will ignore that restriction.
+                if(*curr == '0' && curr+1 != end && '0' <= *(curr+1) && *(curr+1) <= '9'){
+                    result = INVALID_ITEM;
+                    return curr;
+                }
                 const char *num_start = curr;
                 if(*curr == '-') curr++;
                 while(curr != end && ('0' <= *curr && *curr <= '9')){
