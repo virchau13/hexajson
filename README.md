@@ -21,9 +21,9 @@ To manipulate JSON objects:
 ```cpp
 hex::json j = hex::json::make_obj({
     {"key", "value"},
-    {"value", 0xca},
+    {"values", 0xca},
     {"n be anything really", hex::json::make_array({"arrays", "also", "are, "supported"}) }
 });
 j["key"] = "another value"; 
-j["value"] = hex::json::make_array({ 3, 2, "a" });
+j["values"] = hex::json::make_array({ 3, 2, "a" });
 ```
