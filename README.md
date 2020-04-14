@@ -22,7 +22,7 @@ To manipulate JSON objects:
 hex::json j = hex::json::make_obj({
     {"key", "value"},
     {"values", 0xca},
-    {"n be anything really", hex::json::make_array({"arrays", "also", "are, "supported"}) }
+    {"n be anything really", hex::json::make_array({"arrays", "also", "are", "supported"}) }
 });
 j["key"] = "another value"; 
 j["values"] = hex::json::make_array({ 3, 2, "a" });
