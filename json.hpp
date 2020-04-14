@@ -14,76 +14,19 @@
 
 namespace hex {
     /* JSON types as described in the RFC. */
-    enum val_type : uint8_t {
-        UNDEFINED,
-        DECIMAL,
-        INTEGER,
-        STRING,
-        BOOLEAN,
-        ARRAY,
-        OBJECT,
-        INVALID_ITEM
-    };
+    typedef uint8_t val_type;
+    val_type
+        UNDEFINED = 1,
+        DECIMAL = 2,
+        INTEGER = 3,
+        STRING = 4,
+        BOOLEAN = 5,
+        ARRAY = 6,
+        OBJECT = 7,
+        INVALID_ITEM = 0;
     class json;
     typedef std::map<std::string, json> table;
-    class array_t {
-    public:
-        std::vector<json *> data;
-        class iterator {
-        public:
-            std::vector<json *>::iterator it;
-            iterator(std::vector<json *>::iterator jt): it(jt) {}
-            inline void operator++(int){
-                ++it;
-            }
-            inline void operator++(){
-                ++it;
-            }
-            inline void operator--(int){
-                --it;
-            }
-            inline void operator--(){
-                --it;
-            }
-            inline void operator+=(int x){
-                it += x;
-            }
-            inline void operator-=(int x){
-                it -= x;
-            }
-            inline void operator=(std::vector<json *>::iterator jt){
-                it = jt;
-            }
-            inline json& operator*(){
-                return *(*it);
-            }
-        };
-        array_t(): data(0) {}
-        array_t(const size_t size): data(size) {}
-        array_t(const array_t& rhs);
-        array_t(array_t&& rhs): data(std::move(rhs.data)) {}
-        ~array_t();
-        inline const size_t size() const noexcept {
-            return data.size();
-        }
-        inline json& operator[](size_t idx){
-            return *data[idx];
-        }
-        inline iterator begin() noexcept {
-            return data.begin();
-        }
-        inline iterator end() noexcept {
-            return data.end();
-        }
-        inline json& back(){
-            return *data[data.size()-1];
-        }
-        inline void push_back(const json& x);
-        inline void pop_back(){
-            data.pop_back();
-        }
-        inline bool operator==(const array_t& rhs) const;
-    };
+    typedef std::vector<json> array_t;
     union value {
         double decimal;
         int64_t integer;
@@ -96,7 +39,7 @@ namespace hex {
     class json {
         public:
         value val;
-        val_type type = INVALID_ITEM;
+        val_type type;
         // constructors and destructors
         // {{{
         json(const json& rhs){
@@ -108,7 +51,7 @@ namespace hex {
             else if(type == STRING) val.str = new std::string(*rhs.val.str);
             else val = rhs.val;
         }
-        json(json&& rhs){
+        json(json&& rhs) noexcept {
             type = rhs.type;
             /* Move constructor, more like pilfer constructor. */
             val = rhs.val;
@@ -124,7 +67,8 @@ namespace hex {
             if(t == STRING) val.str = new std::string();
         }
         json(const std::string& rhs){
-            operator=(rhs);
+            type = STRING;
+            val.str = new std::string(rhs);
         }
         json(const char* rhs){
             std::string s(rhs);
@@ -133,10 +77,13 @@ namespace hex {
         json(int rhs){
             operator=(rhs);
         }
+        json(int64_t rhs){
+            operator=(rhs);
+        }
         json(double rhs){
             operator=(rhs);
         }
-        void clean_type(){
+        void clean_type() noexcept {
             if(type == OBJECT) delete val.object;
             if(type == ARRAY){
                 delete val.array;
@@ -144,7 +91,7 @@ namespace hex {
             if(type == STRING) delete val.str;
             type = INVALID_ITEM;
         }
-        ~json(){
+        ~json() noexcept {
             clean_type();
         }
         // }}}
@@ -173,6 +120,18 @@ namespace hex {
             clean_type();
             type = STRING;
             val.str = new std::string(rhs);
+            return *this;
+        }
+        const json& operator=(int rhs){
+            clean_type();
+            type = INTEGER;
+            val.integer = rhs;
+            return *this;
+        }
+        const json& operator=(int64_t rhs){
+            clean_type();
+            type = INTEGER;
+            val.integer = rhs;
             return *this;
         }
         const json& operator=(double rhs){
@@ -243,6 +202,12 @@ namespace hex {
         inline json& back() noexcept {
             return val.array->back();
         }
+        inline array_t& as_arr() noexcept {
+            return *val.array;
+        }
+        inline table& as_obj() noexcept {
+            return *val.object;
+        }
         // }}}
         // stringify functions
         // {{{
@@ -312,12 +277,11 @@ namespace hex {
             }
             return ret;
         }
-        /*
-        static json make_array(const std::initializer_list<json>& t){
+        static json make_arr(const std::initializer_list<json>& t){
             json ret(ARRAY);
-            ret.val.array = new array_t(t);
+            ret.as_arr() = t;
             return ret;
-        } */
+        }
         static inline bool is_space(char c){
             // Whitespace in JSON is any of 0x20 (space), 0x09 (horizontal tab), 0x0a (\n), 0x0d (\r).
             return (c == 0x20 || c == 0x09 || c == 0x0a || c == 0x0d);
@@ -628,26 +592,6 @@ namespace hex {
         }
         // }}}
     };
-    // array_t functions
-    // {{{
-    array_t::array_t(const array_t& rhs): data(rhs.size()) {
-        for(int i = 0; i < rhs.size(); i++){
-            data[i] = new json(*rhs.data[i]);
-        }
-    }
-    array_t::~array_t(){
-        for(int i = 0; i < data.size(); i++) delete data[i];
-    }
-    inline void array_t::push_back(const json& x){
-        data.push_back(new json(x));
-    }
-    inline bool array_t::operator==(const array_t& rhs) const {
-        if(rhs.data.size() != data.size()) return false;
-        for(int i = 0; i < data.size(); i++){
-            if(!(*data[i] == *rhs.data[i])) return false;
-        }
-        return true;
-    }
 }
 
 #undef dbg

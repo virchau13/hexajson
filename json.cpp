@@ -60,11 +60,11 @@ int main(int argc, char *argv[]){
         //TODO: add tests
         hex::json j;
         j["a"] = "b";
-        // j["something"] = hex::json::make_array({4, "a", 2.0});
+        j["something"] = hex::json::make_arr({4, "a", 2.0});
         j["x"] = hex::json::make_obj({
             {"y", 7},
             {"z", "a"},
-            // {"extra", hex::json::make_array({4, "a", 3}) }
+            {"extra", hex::json::make_arr({4, "a", 3}) }
         });
         std::cout << j.dump() << '\n';
     }
